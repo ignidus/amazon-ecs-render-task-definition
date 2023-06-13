@@ -16,6 +16,9 @@ inputs:
   environment-variables:
     description: 'Variables to add to the container. Each variable is of the form KEY=value, you can specify multiple variables with multi-line YAML strings.'
     required: false
+  environment-files:
+    description: 'Environment variable files with variables to add to the container. Use the same format as environment-variables'
+    required: false
 outputs:
   task-definition:
     description: 'The path to the rendered task definition file'

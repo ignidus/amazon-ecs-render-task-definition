@@ -3,6 +3,28 @@ const core = require('@actions/core');
 const tmp = require('tmp');
 const fs = require('fs');
 
+function parseEnvironmentVariables(environmentVariables) {
+  const variables = [];
+
+  environmentVariables.split('\n').forEach(line => {
+    const trimmedLine = line.trim();
+    if (trimmedLine.length === 0) { return; }
+    
+    const separatorIdx = trimmedLine.indexOf("=");
+
+    if (separatorIdx === -1) {
+        throw new Error(`Cannot parse the environment variable '${trimmedLine}'. Environment variable pairs must be of the form NAME=value.`);
+    }
+
+    variables.push({
+      name: trimmedLine.substring(0, separatorIdx),
+      value: trimmedLine.substring(separatorIdx + 1),
+    });
+  });
+
+  return variables;
+}
+
 async function run() {
   try {
     // Get inputs
@@ -10,6 +32,7 @@ async function run() {
     const containerName = core.getInput('container-name', { required: true });
     const imageURI = core.getInput('image', { required: true });
 
+    const environmentFiles = core.getInput('environment-files', { required: false });
     const environmentVariables = core.getInput('environment-variables', { required: false });
 
     // Parse the task definition
@@ -33,43 +56,43 @@ async function run() {
     }
     containerDef.image = imageURI;
 
-    if (environmentVariables) {
+    const variables = [];
 
-      // If environment array is missing, create it
+    // Apply environment variables from each file specified in order
+    if (environmentFiles) {
+      environmentFiles.split('\n').forEach(function (line) {
+        const trimmedLine = line.trim();
+        if (trimmedLine.length === 0) { return; }
+
+        if (!fs.existsSync(trimmedLine)) {
+          throw new Error(`Environment file not found: ${trimmedLine}`);
+        }
+
+        const fileVariables = fs.readFileSync(trimmedLine);
+
+        variables.push(...parseEnvironmentVariables(fileVariables));
+      });
+    }
+
+    // Apply environment variables explicitly written, overwriting same variables from files
+    if (environmentVariables) {
       if (!Array.isArray(containerDef.environment)) {
         containerDef.environment = [];
       }
 
-      // Get pairs by splitting on newlines
-      environmentVariables.split('\n').forEach(function (line) {
-        // Trim whitespace
-        const trimmedLine = line.trim();
-        // Skip if empty
-        if (trimmedLine.length === 0) { return; }
-        // Split on =
-        const separatorIdx = trimmedLine.indexOf("=");
-        // If there's nowhere to split
-        if (separatorIdx === -1) {
-            throw new Error(`Cannot parse the environment variable '${trimmedLine}'. Environment variable pairs must be of the form NAME=value.`);
-        }
-        // Build object
-        const variable = {
-          name: trimmedLine.substring(0, separatorIdx),
-          value: trimmedLine.substring(separatorIdx + 1),
-        };
+      variables.push(...parseEnvironmentVariables(environmentVariables));
+    }
 
-        // Search container definition environment for one matching name
+    if (variables) {
+      variables.forEach(variable => {
         const variableDef = containerDef.environment.find((e) => e.name == variable.name);
         if (variableDef) {
-          // If found, update
           variableDef.value = variable.value;
         } else {
-          // Else, create
           containerDef.environment.push(variable);
         }
       })
     }
-
 
     // Write out a new task definition file
     var updatedTaskDefFile = tmp.fileSync({
