@@ -4,7 +4,7 @@ const tmp = require('tmp');
 const fs = require('fs');
 
 function parseEnvironmentVariables(environmentVariables) {
-  const variables = [];
+  const vars = [];
 
   environmentVariables.split('\n').forEach(line => {
     const trimmedLine = line.trim();
@@ -16,13 +16,13 @@ function parseEnvironmentVariables(environmentVariables) {
         throw new Error(`Cannot parse the environment variable '${trimmedLine}'. Environment variable pairs must be of the form NAME=value.`);
     }
 
-    variables.push({
+    vars.push({
       name: trimmedLine.substring(0, separatorIdx),
       value: trimmedLine.substring(separatorIdx + 1),
     });
   });
 
-  return variables;
+  return vars;
 }
 
 async function run() {
@@ -31,9 +31,8 @@ async function run() {
     const taskDefinitionFile = core.getInput('task-definition', { required: true });
     const containerName = core.getInput('container-name', { required: true });
     const imageURI = core.getInput('image', { required: true });
-
-    const environmentFiles = core.getInput('environment-files', { required: false });
     const environmentVariables = core.getInput('environment-variables', { required: false });
+    const environmentFiles = core.getInput('environment-files', { required: false });
 
     // Parse the task definition
     const taskDefPath = path.isAbsolute(taskDefinitionFile) ?
@@ -56,11 +55,11 @@ async function run() {
     }
     containerDef.image = imageURI;
 
-    const variables = [];
+    const envVars = [];
 
     // Apply environment variables from each file specified in order
     if (environmentFiles) {
-      environmentFiles.split('\n').forEach(function (line) {
+      environmentFiles.split('\n').forEach(line => {
         const trimmedLine = line.trim();
         if (trimmedLine.length === 0) { return; }
 
@@ -70,21 +69,20 @@ async function run() {
 
         const fileVariables = fs.readFileSync(trimmedLine);
 
-        variables.push(...parseEnvironmentVariables(fileVariables));
+        envVars.push(...parseEnvironmentVariables(fileVariables));
       });
     }
 
     // Apply environment variables explicitly written, overwriting same variables from files
     if (environmentVariables) {
+      envVars.push(...parseEnvironmentVariables(environmentVariables));
+    }
+
+    if (envVars) {
       if (!Array.isArray(containerDef.environment)) {
         containerDef.environment = [];
       }
-
-      variables.push(...parseEnvironmentVariables(environmentVariables));
-    }
-
-    if (variables) {
-      variables.forEach(variable => {
+      envVars.forEach(variable => {
         const variableDef = containerDef.environment.find((e) => e.name == variable.name);
         if (variableDef) {
           variableDef.value = variable.value;

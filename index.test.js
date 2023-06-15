@@ -21,13 +21,25 @@ describe('Render task definition', () => {
 
     beforeEach(() => {
         jest.clearAllMocks();
+        jest.mock('tmp');
+        jest.mock('fs', () => ({
+            promises: {
+                access: jest.fn()
+            },
+            constants: {
+                O_CREATE: jest.fn()
+            },
+            rmdirSync: jest.fn(),
+            existsSync: jest.fn(),
+            writeFileSync: jest.fn()
+        }));
 
         core.getInput = jest
             .fn()
             .mockReturnValueOnce('task-definition.json') // task-definition
             .mockReturnValueOnce('web')                  // container-name
             .mockReturnValueOnce('nginx:latest')         // image
-            .mockReturnValueOnce('FOO=bar\nHELLO=world'); // environment-variables
+            .mockReturnValueOnce('FOO=bar\nHELLO=world') // environment-variables
 
         process.env = Object.assign(process.env, { GITHUB_WORKSPACE: __dirname });
         process.env = Object.assign(process.env, { RUNNER_TEMP: '/home/runner/work/_temp' });
@@ -61,6 +73,71 @@ describe('Render task definition', () => {
                 }
             ]
         }), { virtual: true });
+    });
+
+    test('renders the task definition with environment variables', async () => {
+        core.getInput = jest
+            .fn()
+            .mockReturnValueOnce('/hello/task-definition.json') // task-definition
+            .mockReturnValueOnce('web')                  // container-name
+            .mockReturnValueOnce('nginx:latest')         // image
+            .mockReturnValueOnce('EXAMPLE=here')         // environment-variables
+            .mockReturnValueOnce('dev.env');             // environment-files
+        
+        console.log = jest.fn();
+
+        jest.mock('/hello/task-definition.json', () => ({
+            family: 'task-def-family',
+            containerDefinitions: [
+                {
+                    name: "web",
+                    image: "php-image"
+                },
+            ]
+        }), { virtual: true });
+
+        fs.readFileSync = jest.fn()
+            .mockReturnValueOnce('FILE_VAR=test1234\nFILE_VAR_AGAIN=hello');
+        
+        console.log = jest.fn();
+
+        await run();
+        
+        expect(tmp.fileSync).toHaveBeenNthCalledWith(1, {
+            tmpdir: '/home/runner/work/_temp',
+            prefix: 'task-definition-',
+            postfix: '.json',
+            keep: true,
+            discardDescriptor: true
+          });
+
+        expect(fs.writeFileSync).toHaveBeenNthCalledWith(1, 'new-task-def-file-name',
+            JSON.stringify({
+                family: 'task-def-family',
+                containerDefinitions: [
+                    {
+                        name: "web",
+                        image: "nginx:latest",
+                        environment: [
+                            {
+                                name: "FILE_VAR",
+                                value: "test1234"
+                            },
+                            {
+                                name: "FILE_VAR_AGAIN",
+                                value: "hello"
+                            },
+                            {
+                                name: "EXAMPLE",
+                                value: "here"
+                            },
+                        ]
+                    }
+                ]
+            }, null, 2)
+        );
+
+        expect(core.setOutput).toHaveBeenNthCalledWith(1, 'task-definition', 'new-task-def-file-name');
     });
 
     test('renders the task definition and creates a new task def file', async () => {
@@ -104,51 +181,60 @@ describe('Render task definition', () => {
         expect(core.setOutput).toHaveBeenNthCalledWith(1, 'task-definition', 'new-task-def-file-name');
     });
 
-    test('renders a task definition at an absolute path, and with initial environment empty', async () => {
-        core.getInput = jest
-            .fn()
-            .mockReturnValueOnce('/hello/task-definition.json') // task-definition
-            .mockReturnValueOnce('web')                  // container-name
-            .mockReturnValueOnce('nginx:latest')         // image
-            .mockReturnValueOnce('EXAMPLE=here');        // environment-variables
-        jest.mock('/hello/task-definition.json', () => ({
-            family: 'task-def-family',
-            containerDefinitions: [
-                {
-                    name: "web",
-                    image: "some-other-image"
-                }
-            ]
-        }), { virtual: true });
+    // test('renders a task definition at an absolute path, and with initial environment empty', async () => {
+    //     core.getInput = jest
+    //         .fn()
+    //         .mockReturnValueOnce('/hello/task-definition.json') // task-definition
+    //         .mockReturnValueOnce('web')                  // container-name
+    //         .mockReturnValueOnce('nginx:latest')         // image
+    //         .mockReturnValueOnce('EXAMPLE=here');        // environment-variables
+            
+    //     jest.mock('/hello/task-definition.json', () => ({
+    //         family: 'task-def-family',
+    //         containerDefinitions: [
+    //             {
+    //                 name: "web",
+    //                 image: "some-other-image"
+    //             }
+    //         ]
+    //     }), { virtual: true });
 
-        await run();
+    //     tmp.fileSync.mockReturnValue({
+    //         name: 'new-task-def-file-name-2'
+    //     });
 
-        expect(tmp.fileSync).toHaveBeenNthCalledWith(1, {
-            tmpdir: '/home/runner/work/_temp',
-            prefix: 'task-definition-',
-            postfix: '.json',
-            keep: true,
-            discardDescriptor: true
-          });
-        expect(fs.writeFileSync).toHaveBeenNthCalledWith(1, 'new-task-def-file-name',
-            JSON.stringify({
-                family: 'task-def-family',
-                containerDefinitions: [
-                    {
-                        name: "web",
-                        image: "nginx:latest",
-                        environment: [
-                            {
-                                name: "EXAMPLE",
-                                value: "here"
-                            }
-                        ]
-                    }
-                ]
-            }, null, 2)
-        );
-        expect(core.setOutput).toHaveBeenNthCalledWith(1, 'task-definition', 'new-task-def-file-name');
-    });
+    //     console.log = jest.fn();
+
+    //     await run();
+
+    //     // expect(console.log).toHaveBeenNthCalledWith(4, '');
+
+    //     expect(tmp.fileSync).toHaveBeenNthCalledWith(1, {
+    //         tmpdir: '/home/runner/work/_temp',
+    //         prefix: 'task-definition-',
+    //         postfix: '.json',
+    //         keep: true,
+    //         discardDescriptor: true
+    //       });
+    //     expect(fs.writeFileSync).toHaveBeenNthCalledWith(1, 'new-task-def-file-name-2',
+    //         JSON.stringify({
+    //             family: 'task-def-family',
+    //             containerDefinitions: [
+    //                 {
+    //                     name: "web",
+    //                     image: "nginx:latest",
+    //                     environment: [
+    //                         {
+    //                             name: "EXAMPLE",
+    //                             value: "here"
+    //                         }
+    //                     ]
+    //                 }
+    //             ]
+    //         }, null, 2)
+    //     );
+    //     expect(core.setOutput).toHaveBeenNthCalledWith(1, 'task-definition', 'new-task-def-file-name-2');
+    // });
 
     test('error returned for missing task definition file', async () => {
         fs.existsSync.mockReturnValue(false);
