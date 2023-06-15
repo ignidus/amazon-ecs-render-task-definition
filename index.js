@@ -17,6 +17,7 @@ function parseEnvironmentVariables(environmentVariables) {
   environmentVariables.split('\n').forEach(line => {
     const trimmedLine = line.trim();
     if (trimmedLine.length === 0) { return; }
+    if (trimmedLine.charAt(0) === '#') { return; }
     
     const separatorIdx = trimmedLine.indexOf("=");
 
@@ -25,8 +26,8 @@ function parseEnvironmentVariables(environmentVariables) {
     }
 
     vars.push({
-      name: trimmedLine.substring(0, separatorIdx),
-      value: trimmedLine.substring(separatorIdx + 1),
+      name: trimmedLine.substring(0, separatorIdx).trim(),
+      value: trimmedLine.substring(separatorIdx + 1).trim(),
     });
   });
 
@@ -76,6 +77,7 @@ async function run() {
         }
 
         const fileVariables = fs.readFileSync(trimmedLine, { encoding: 'utf8', flag: 'r' });
+
 
         envVars.push(...parseEnvironmentVariables(fileVariables));
       });

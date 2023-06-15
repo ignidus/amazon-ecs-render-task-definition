@@ -97,7 +97,7 @@ describe('Render task definition', () => {
         }), { virtual: true });
 
         fs.readFileSync = jest.fn()
-            .mockReturnValueOnce('FILE_VAR=test1234\nFILE_VAR_AGAIN=hello');
+            .mockReturnValueOnce('FILE_VAR=test1234\nFILE_VAR_AGAIN = hello there\n#DISABLED=none\n#comment\nQUOTED="quoted"');
         
         console.log = jest.fn();
 
@@ -125,7 +125,11 @@ describe('Render task definition', () => {
                             },
                             {
                                 name: "FILE_VAR_AGAIN",
-                                value: "hello"
+                                value: "hello there"
+                            },
+                            {
+                                name: "QUOTED",
+                                value: "\"quoted\""
                             },
                             {
                                 name: "EXAMPLE",
