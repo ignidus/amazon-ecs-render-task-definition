@@ -6,6 +6,14 @@ const fs = require('fs');
 function parseEnvironmentVariables(environmentVariables) {
   const vars = [];
 
+  if (
+    !environmentVariables 
+    || typeof environmentVariables !== 'string'
+    || environmentVariables.trim().length === 0
+  ) { 
+    return vars;
+  }
+
   environmentVariables.split('\n').forEach(line => {
     const trimmedLine = line.trim();
     if (trimmedLine.length === 0) { return; }
@@ -67,7 +75,7 @@ async function run() {
           throw new Error(`Environment file not found: ${trimmedLine}`);
         }
 
-        const fileVariables = fs.readFileSync(trimmedLine);
+        const fileVariables = fs.readFileSync(trimmedLine, { encoding: 'utf8', flag: 'r' });
 
         envVars.push(...parseEnvironmentVariables(fileVariables));
       });
